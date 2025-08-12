@@ -6,6 +6,7 @@ import type {
   Endpoint,
   ModelConfig,
   ModelProviderConfig,
+  TokenUsage,
   UserEndpointConfig,
 } from "./types";
 import { buildIndexes, ModelIndexes } from "./build-indexes";
@@ -185,6 +186,105 @@ function getPtbEndpointsWithIds(model: string, provider: string): Result<Record<
   return ok(result);
 }
 
+function computeDimensionCost(
+  usage: number | undefined,
+  rate: number | undefined
+): Result<number, string> {
+  if (!usage) return ok(0);
+  if (rate === undefined) {
+    // if we have usage but no rate, we can't compute the cost,
+    // and we should return an error
+    return err("Undefined pricing");
+  }
+
+  return ok(usage * rate);
+}
+
+function computeCacheWriteCost(
+  usage: number | { "5m": number; "1h": number; default: number } | undefined,
+  pricing: number | { "5m": number; "1h": number; default: number } | undefined,
+): Result<number, string> {
+  if (!usage) return ok(0);
+  if (pricing === undefined) {
+    // if we have usage but no pricing, we can't compute the cost,
+    // and we should return an error
+    return err("Undefined pricing");
+  }
+
+  if (typeof pricing === "number" && typeof usage === "number") {
+    return ok(usage * pricing);
+  }
+
+  if (typeof usage === "object" && typeof pricing === "number") {
+    return ok(usage.default * pricing);
+  }
+
+  if (typeof pricing === "object" && typeof usage === "object") {
+    let cacheWriteCost = pricing.default * usage.default;
+    cacheWriteCost += pricing["5m"] * usage["5m"];
+    cacheWriteCost += pricing["1h"] * usage["1h"];
+    return ok(cacheWriteCost);
+  }
+
+  return err("Invalid pricing");
+}
+
+function getCost(endpoint: Endpoint, tokenUsage: TokenUsage): Result<number, string> {
+  const pricingRates = endpoint.pricing;
+  let total = 0;
+
+  // Compute each pricing dimension (except cacheWrite which is handled below)
+  const promptCost = computeDimensionCost(tokenUsage.prompt, pricingRates.prompt);
+  if (promptCost.error) return err(promptCost.error);
+  total += promptCost.data ?? 0;
+
+  const completionCost = computeDimensionCost(tokenUsage.completion, pricingRates.completion);
+  if (completionCost.error) return err(completionCost.error);
+  total += completionCost.data ?? 0;
+
+  const imageCost = computeDimensionCost(tokenUsage.image, pricingRates.image);
+  if (imageCost.error) return err(imageCost.error);
+  total += imageCost.data ?? 0;
+
+  const cacheReadCost = computeDimensionCost(tokenUsage.cacheRead, pricingRates.cacheRead);
+  if (cacheReadCost.error) return err(cacheReadCost.error);
+  total += cacheReadCost.data ?? 0;
+
+  const thinkingCost = computeDimensionCost(tokenUsage.thinking, pricingRates.thinking);
+  if (thinkingCost.error) return err(thinkingCost.error);
+  total += thinkingCost.data ?? 0;
+
+  const requestCost = computeDimensionCost(tokenUsage.request, pricingRates.request);
+  if (requestCost.error) return err(requestCost.error);
+  total += requestCost.data ?? 0;
+
+  const audioCost = computeDimensionCost(tokenUsage.audio, pricingRates.audio);
+  if (audioCost.error) return err(audioCost.error);
+  total += audioCost.data ?? 0;
+
+  const videoCost = computeDimensionCost(tokenUsage.video, pricingRates.video);
+  if (videoCost.error) return err(videoCost.error);
+  total += videoCost.data ?? 0;
+
+  const webSearchCost = computeDimensionCost(tokenUsage.web_search, pricingRates.web_search);
+  if (webSearchCost.error) return err(webSearchCost.error);
+  total += webSearchCost.data ?? 0;
+
+  const internalReasoningCost = computeDimensionCost(
+    tokenUsage.internal_reasoning,
+    pricingRates.internal_reasoning
+  );
+  if (internalReasoningCost.error) return err(internalReasoningCost.error);
+  total += internalReasoningCost.data ?? 0;
+
+
+  const cacheWriteCost = computeCacheWriteCost(tokenUsage.cacheWrite, pricingRates.cacheWrite);
+  if (cacheWriteCost.error) return err(cacheWriteCost.error);
+  total += cacheWriteCost.data ?? 0;
+
+  return ok(total);
+}
+
 export const registry = {
   getModel,
   getAllModels,
@@ -196,6 +296,7 @@ export const registry = {
   getPtbEndpointsByModel,
   getPtbEndpointsByProvider,
   getPtbEndpointsWithIds,
+  getCost,
   getProviderModels,
   buildEndpoint,
   buildModelId,

@@ -479,7 +479,7 @@ export class RequestWrapper {
     return ok(null);
   }
 
-  async getRawProviderAuthHeader(): Promise<string | undefined> {
+  getRawProviderAuthHeader(): string | undefined {
     let auth = this.authorization;
     if (auth?.startsWith("Bearer ")) {
       auth = auth.split(" ")[1];

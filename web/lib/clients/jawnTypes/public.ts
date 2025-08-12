@@ -283,6 +283,9 @@ export interface paths {
   "/v1/stripe/subscription/free/usage": {
     get: operations["GetFreeUsage"];
   };
+  "/v1/stripe/cloud/checkout-session": {
+    post: operations["CreateCloudGatewayCheckoutSession"];
+  };
   "/v1/stripe/subscription/new-customer/upgrade-to-pro": {
     post: operations["UpgradeToPro"];
   };
@@ -316,9 +319,6 @@ export interface paths {
   };
   "/v1/stripe/subscription": {
     get: operations["GetSubscription"];
-  };
-  "/v1/stripe/webhook": {
-    post: operations["HandleStripeWebhook"];
   };
   "/v1/trace/custom/v1/log": {
     post: operations["LogCustomTraceLegacy"];
@@ -607,6 +607,15 @@ export interface paths {
   "/v1/customer/query": {
     post: operations["GetCustomers"];
   };
+  "/v1/credits/balance": {
+    get: operations["GetCreditsBalance"];
+  };
+  "/v1/credits/payments": {
+    get: operations["ListTokenUsagePayments"];
+  };
+  "/v1/credits/totalSpend": {
+    get: operations["GetTotalSpend"];
+  };
   "/v1/api-keys/provider-key/{providerKeyId}": {
     get: operations["GetProviderKey"];
     delete: operations["DeleteProviderKey"];
@@ -855,6 +864,8 @@ export interface components {
       "helicone-score-feedback"?: components["schemas"]["Partial_BooleanOperators_"];
       prompt_id?: components["schemas"]["Partial_TextOperators_"];
       prompt_version?: components["schemas"]["Partial_TextOperators_"];
+      request_referrer?: components["schemas"]["Partial_TextOperators_"];
+      is_passthrough_billing?: components["schemas"]["Partial_BooleanOperators_"];
     };
     /** @description From T, pick a set of properties whose keys are in the union K */
     "Pick_FilterLeaf.users_view-or-request_response_rmt_": {
@@ -2007,6 +2018,10 @@ Json: JsonObject;
       error: null;
     };
     "Result_ScoreV2-or-null.string_": components["schemas"]["ResultSuccess_ScoreV2-or-null_"] | components["schemas"]["ResultError_string_"];
+    CreateCloudGatewayCheckoutSessionRequest: {
+      /** Format: double */
+      amount: number;
+    };
     UpgradeToProRequest: {
       addons?: {
         evals?: boolean;
@@ -3580,6 +3595,41 @@ Json: JsonObject;
       id: string;
       name: string;
     };
+    CreditBalanceResponse: {
+      /** Format: double */
+      totalCreditsPurchased: number;
+      /** Format: double */
+      balance: number;
+    };
+    ResultSuccess_CreditBalanceResponse_: {
+      data: components["schemas"]["CreditBalanceResponse"];
+      /** @enum {number|null} */
+      error: null;
+    };
+    "Result_CreditBalanceResponse.string_": components["schemas"]["ResultSuccess_CreditBalanceResponse_"] | components["schemas"]["ResultError_string_"];
+    PurchasedCredits: {
+      id: string;
+      /** Format: double */
+      createdAt: number;
+      /** Format: double */
+      credits: number;
+      referenceId: string;
+    };
+    PaginatedPurchasedCredits: {
+      purchases: components["schemas"]["PurchasedCredits"][];
+      /** Format: double */
+      total: number;
+      /** Format: double */
+      page: number;
+      /** Format: double */
+      pageSize: number;
+    };
+    ResultSuccess_PaginatedPurchasedCredits_: {
+      data: components["schemas"]["PaginatedPurchasedCredits"];
+      /** @enum {number|null} */
+      error: null;
+    };
+    "Result_PaginatedPurchasedCredits.string_": components["schemas"]["ResultSuccess_PaginatedPurchasedCredits_"] | components["schemas"]["ResultError_string_"];
     "ResultSuccess__api_key_hash-string--api_key_name-string--created_at-string--governance-boolean--id-number--key_permissions-string--organization_id-string--soft_delete-boolean--temp_key-boolean--updated_at-string--user_id-string_-Array_": {
       data: {
           user_id: string;
@@ -5506,6 +5556,21 @@ export interface operations {
       };
     };
   };
+  CreateCloudGatewayCheckoutSession: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateCloudGatewayCheckoutSessionRequest"];
+      };
+    };
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": string;
+        };
+      };
+    };
+  };
   UpgradeToPro: {
     requestBody: {
       content: {
@@ -5699,19 +5764,6 @@ export interface operations {
             status: string;
           }) | null;
         };
-      };
-    };
-  };
-  HandleStripeWebhook: {
-    requestBody: {
-      content: {
-        "application/json": unknown;
-      };
-    };
-    responses: {
-      /** @description No content */
-      204: {
-        content: never;
       };
     };
   };
@@ -7330,6 +7382,42 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["Customer"][];
+        };
+      };
+    };
+  };
+  GetCreditsBalance: {
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": components["schemas"]["Result_CreditBalanceResponse.string_"];
+        };
+      };
+    };
+  };
+  ListTokenUsagePayments: {
+    parameters: {
+      query?: {
+        page?: number;
+        pageSize?: number;
+      };
+    };
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": components["schemas"]["Result_PaginatedPurchasedCredits.string_"];
+        };
+      };
+    };
+  };
+  GetTotalSpend: {
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": components["schemas"]["Result_number.string_"];
         };
       };
     };

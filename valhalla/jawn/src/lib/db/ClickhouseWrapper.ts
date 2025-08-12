@@ -80,7 +80,7 @@ export class ClickhouseClientWrapper {
           wait_end_of_query: 1,
         },
       });
-      return { data: await queryResult.json<T[]>(), error: null };
+      return { data: await queryResult.json<T>(), error: null };
     } catch (err) {
       console.error("Error executing Clickhouse query: ", query, parameters);
       console.error(err);
@@ -129,7 +129,7 @@ export class ClickhouseClientWrapper {
           allow_ddl: 0,
         } as ClickHouseSettings,
       });
-      return { data: await queryResult.json<T[]>(), error: null };
+      return { data: await queryResult.json<T>(), error: null };
     } catch (err) {
       console.error(
         "Error executing HQL query with context: ",
@@ -309,6 +309,7 @@ export interface RequestResponseRMT {
   prompt_id?: string;
   prompt_version?: string;
   request_referrer?: string;
+  is_passthrough_billing: boolean;
 }
 
 export interface Prompt2025Input {

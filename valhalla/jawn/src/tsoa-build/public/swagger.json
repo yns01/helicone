@@ -676,6 +676,12 @@
 					},
 					"prompt_version": {
 						"$ref": "#/components/schemas/Partial_TextOperators_"
+					},
+					"request_referrer": {
+						"$ref": "#/components/schemas/Partial_TextOperators_"
+					},
+					"is_passthrough_billing": {
+						"$ref": "#/components/schemas/Partial_BooleanOperators_"
 					}
 				},
 				"type": "object",
@@ -5317,6 +5323,19 @@
 						"$ref": "#/components/schemas/ResultError_string_"
 					}
 				]
+			},
+			"CreateCloudGatewayCheckoutSessionRequest": {
+				"properties": {
+					"amount": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"amount"
+				],
+				"type": "object",
+				"additionalProperties": false
 			},
 			"UpgradeToProRequest": {
 				"properties": {
@@ -10978,6 +10997,140 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"CreditBalanceResponse": {
+				"properties": {
+					"totalCreditsPurchased": {
+						"type": "number",
+						"format": "double"
+					},
+					"balance": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"totalCreditsPurchased",
+					"balance"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ResultSuccess_CreditBalanceResponse_": {
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/CreditBalanceResponse"
+					},
+					"error": {
+						"type": "number",
+						"enum": [
+							null
+						],
+						"nullable": true
+					}
+				},
+				"required": [
+					"data",
+					"error"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"Result_CreditBalanceResponse.string_": {
+				"anyOf": [
+					{
+						"$ref": "#/components/schemas/ResultSuccess_CreditBalanceResponse_"
+					},
+					{
+						"$ref": "#/components/schemas/ResultError_string_"
+					}
+				]
+			},
+			"PurchasedCredits": {
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"createdAt": {
+						"type": "number",
+						"format": "double"
+					},
+					"credits": {
+						"type": "number",
+						"format": "double"
+					},
+					"referenceId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"createdAt",
+					"credits",
+					"referenceId"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"PaginatedPurchasedCredits": {
+				"properties": {
+					"purchases": {
+						"items": {
+							"$ref": "#/components/schemas/PurchasedCredits"
+						},
+						"type": "array"
+					},
+					"total": {
+						"type": "number",
+						"format": "double"
+					},
+					"page": {
+						"type": "number",
+						"format": "double"
+					},
+					"pageSize": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"purchases",
+					"total",
+					"page",
+					"pageSize"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ResultSuccess_PaginatedPurchasedCredits_": {
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/PaginatedPurchasedCredits"
+					},
+					"error": {
+						"type": "number",
+						"enum": [
+							null
+						],
+						"nullable": true
+					}
+				},
+				"required": [
+					"data",
+					"error"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"Result_PaginatedPurchasedCredits.string_": {
+				"anyOf": [
+					{
+						"$ref": "#/components/schemas/ResultSuccess_PaginatedPurchasedCredits_"
+					},
+					{
+						"$ref": "#/components/schemas/ResultError_string_"
+					}
+				]
+			},
 			"ResultSuccess__api_key_hash-string--api_key_name-string--created_at-string--governance-boolean--id-number--key_permissions-string--organization_id-string--soft_delete-boolean--temp_key-boolean--updated_at-string--user_id-string_-Array_": {
 				"properties": {
 					"data": {
@@ -15873,6 +16026,42 @@
 				"parameters": []
 			}
 		},
+		"/v1/stripe/cloud/checkout-session": {
+			"post": {
+				"operationId": "CreateCloudGatewayCheckoutSession",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					}
+				},
+				"tags": [
+					"Stripe"
+				],
+				"security": [
+					{
+						"api_key": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CreateCloudGatewayCheckoutSessionRequest"
+							}
+						}
+					}
+				}
+			}
+		},
 		"/v1/stripe/subscription/new-customer/upgrade-to-pro": {
 			"post": {
 				"operationId": "UpgradeToPro",
@@ -16446,33 +16635,6 @@
 					}
 				],
 				"parameters": []
-			}
-		},
-		"/v1/stripe/webhook": {
-			"post": {
-				"operationId": "HandleStripeWebhook",
-				"responses": {
-					"204": {
-						"description": "No content"
-					}
-				},
-				"tags": [
-					"Stripe"
-				],
-				"security": [
-					{
-						"api_key": []
-					}
-				],
-				"parameters": [],
-				"requestBody": {
-					"required": true,
-					"content": {
-						"application/json": {
-							"schema": {}
-						}
-					}
-				}
 			}
 		},
 		"/v1/trace/custom/v1/log": {
@@ -20508,6 +20670,103 @@
 						}
 					}
 				}
+			}
+		},
+		"/v1/credits/balance": {
+			"get": {
+				"operationId": "GetCreditsBalance",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Result_CreditBalanceResponse.string_"
+								}
+							}
+						}
+					}
+				},
+				"tags": [
+					"Credits"
+				],
+				"security": [
+					{
+						"api_key": []
+					}
+				],
+				"parameters": []
+			}
+		},
+		"/v1/credits/payments": {
+			"get": {
+				"operationId": "ListTokenUsagePayments",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Result_PaginatedPurchasedCredits.string_"
+								}
+							}
+						}
+					}
+				},
+				"tags": [
+					"Credits"
+				],
+				"security": [
+					{
+						"api_key": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "query",
+						"name": "page",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"in": "query",
+						"name": "pageSize",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/v1/credits/totalSpend": {
+			"get": {
+				"operationId": "GetTotalSpend",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Result_number.string_"
+								}
+							}
+						}
+					}
+				},
+				"tags": [
+					"Credits"
+				],
+				"security": [
+					{
+						"api_key": []
+					}
+				],
+				"parameters": []
 			}
 		},
 		"/v1/api-keys/provider-key/{providerKeyId}": {

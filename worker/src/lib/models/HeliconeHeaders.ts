@@ -80,6 +80,7 @@ export interface IHeliconeHeaders {
     experimentId: Nullable<string>;
   };
   heliconeManualAccessKey: Nullable<string>;
+  passthroughBillingEnabled: Nullable<boolean>;
 }
 
 export class HeliconeHeaders implements IHeliconeHeaders {
@@ -149,6 +150,7 @@ export class HeliconeHeaders implements IHeliconeHeaders {
   lytixKey: Nullable<string>;
   lytixHost: Nullable<string>;
   heliconeManualAccessKey: Nullable<string>;
+  passthroughBillingEnabled: Nullable<boolean>;
 
   constructor(private headers: Headers) {
     const heliconeHeaders = this.getHeliconeHeaders();
@@ -198,6 +200,7 @@ export class HeliconeHeaders implements IHeliconeHeaders {
       experimentId: heliconeHeaders.experimentHeaders.experimentId,
     };
     this.heliconeManualAccessKey = heliconeHeaders.heliconeManualAccessKey;
+    this.passthroughBillingEnabled = heliconeHeaders.passthroughBillingEnabled;
   }
 
   private getFallBacks(): Nullable<HeliconeFallback[]> {
@@ -396,6 +399,12 @@ export class HeliconeHeaders implements IHeliconeHeaders {
       },
       heliconeManualAccessKey:
         this.headers.get("Helicone-Manual-Access-Key") ?? null,
+      passthroughBillingEnabled:
+        (
+          this.headers.get("Helicone-Pass-Through-Billing") ??
+          this.headers.get("Helicone-Pass-Through-Billing-Enabled") ??
+          ""
+        ).toLowerCase() === "true",
     };
   }
 

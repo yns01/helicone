@@ -91,11 +91,15 @@ export interface ModelPricing {
       };
   thinking?: number;
   request?: number;
+  // TODO: multimodal tokens should be structured the same as OpenAI responses:
+  //       ie, separating token usage even for multimodal types by prompt/completion
   audio?: number;
   video?: number;
   web_search?: number;
   internal_reasoning?: number;
 }
+
+export type TokenUsage = ModelPricing & { totalTokens: number, heliconeCalculated: boolean };
 
 export interface ModelConfig {
   name: string;

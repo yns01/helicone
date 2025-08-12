@@ -27,6 +27,7 @@ export class LlamaBodyProcessor implements IBodyProcessor {
           totalTokens: totalTokensMetric?.value || (promptTokensMetric.value + completionTokensMetric.value),
           promptTokens: promptTokensMetric.value,
           completionTokens: completionTokensMetric.value,
+          
           heliconeCalculated: false,
         },
       });

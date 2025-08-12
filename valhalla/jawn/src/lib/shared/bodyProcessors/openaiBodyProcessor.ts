@@ -69,21 +69,12 @@ export class OpenAIBodyProcessor implements IBodyProcessor {
     const usage = response.usage;
     const effectivePromptTokens =
       usage?.prompt_tokens !== undefined
-        ? Math.max(
-            0,
-            (usage.prompt_tokens ?? 0) -
-              (usage.prompt_tokens_details?.cached_tokens ?? 0) -
-              (usage.prompt_tokens_details?.audio_tokens ?? 0)
-          )
-        : usage?.input_tokens;
+        ? usage.prompt_tokens
+        : usage?.input_tokens ?? undefined;
     const effectiveCompletionTokens =
       usage?.completion_tokens !== undefined
-        ? Math.max(
-            0,
-            (usage.completion_tokens ?? 0) -
-              (usage.completion_tokens_details?.audio_tokens ?? 0)
-          )
-        : usage?.output_tokens;
+        ? usage.completion_tokens
+        : usage?.output_tokens ?? undefined;
 
     return {
       promptTokens: effectivePromptTokens,

@@ -87,16 +87,17 @@ export class OpenAIStreamProcessor implements IBodyProcessor {
               promptTokens:
                 consolidatedData.usage?.prompt_tokens ||
                 consolidatedData.usage?.input_tokens,
+              promptCacheReadTokens: consolidatedData.usage?.prompt_token_details?.cached_tokens,
               heliconeCalculated:
                 consolidatedData.usage?.helicone_calculated ?? false,
             }
           : {
-              total_tokens: -1,
-              completion_tokens: -1,
-              prompt_tokens: -1,
-              helicone_calculated: true,
+              totalTokens: -1,
+              completionTokens: -1,
+              promptTokens: -1,
+              heliconeCalculated: true,
               helicone_error:
-                "counting tokens not supported, please see https://docs.helicone.ai/use-cases/enable-stream-usage",
+              "counting tokens not supported, please see https://docs.helicone.ai/use-cases/enable-stream-usage",
             };
 
       return ok({

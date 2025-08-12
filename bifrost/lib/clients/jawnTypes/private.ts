@@ -35,6 +35,9 @@ export interface paths {
   "/v1/stripe/subscription/free/usage": {
     get: operations["GetFreeUsage"];
   };
+  "/v1/stripe/cloud/checkout-session": {
+    post: operations["CreateCloudGatewayCheckoutSession"];
+  };
   "/v1/stripe/subscription/new-customer/upgrade-to-pro": {
     post: operations["UpgradeToPro"];
   };
@@ -68,9 +71,6 @@ export interface paths {
   };
   "/v1/stripe/subscription": {
     get: operations["GetSubscription"];
-  };
-  "/v1/stripe/webhook": {
-    post: operations["HandleStripeWebhook"];
   };
   "/v1/organization": {
     get: operations["GetOrganizations"];
@@ -537,6 +537,10 @@ export interface components {
       error: null;
     };
     "Result_null.string_": components["schemas"]["ResultSuccess_null_"] | components["schemas"]["ResultError_string_"];
+    CreateCloudGatewayCheckoutSessionRequest: {
+      /** Format: double */
+      amount: number;
+    };
     UpgradeToProRequest: {
       addons?: {
         evals?: boolean;
@@ -1306,6 +1310,8 @@ Json: JsonObject;
       "helicone-score-feedback"?: components["schemas"]["Partial_BooleanOperators_"];
       prompt_id?: components["schemas"]["Partial_TextOperators_"];
       prompt_version?: components["schemas"]["Partial_TextOperators_"];
+      request_referrer?: components["schemas"]["Partial_TextOperators_"];
+      is_passthrough_billing?: components["schemas"]["Partial_BooleanOperators_"];
     };
     /** @description Make all properties in T optional */
     Partial_SessionsRequestResponseRMTToOperators_: {
@@ -1968,6 +1974,7 @@ Json: JsonObject;
     };
     "Result_ScoreV2-or-null.string_": components["schemas"]["ResultSuccess_ScoreV2-or-null_"] | components["schemas"]["ResultError_string_"];
     HeliconeMeta: {
+      isPassthroughBilling?: boolean;
       gatewayDeploymentTarget?: string;
       gatewayRouterId?: string;
       heliconeManualAccessKey?: string;
@@ -15777,6 +15784,21 @@ export interface operations {
       };
     };
   };
+  CreateCloudGatewayCheckoutSession: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateCloudGatewayCheckoutSessionRequest"];
+      };
+    };
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": string;
+        };
+      };
+    };
+  };
   UpgradeToPro: {
     requestBody: {
       content: {
@@ -15970,19 +15992,6 @@ export interface operations {
             status: string;
           }) | null;
         };
-      };
-    };
-  };
-  HandleStripeWebhook: {
-    requestBody: {
-      content: {
-        "application/json": unknown;
-      };
-    };
-    responses: {
-      /** @description No content */
-      204: {
-        content: never;
       };
     };
   };
