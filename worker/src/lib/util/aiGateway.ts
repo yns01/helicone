@@ -19,8 +19,6 @@ import {
   Endpoint,
   UserEndpointConfig,
 } from "@helicone-package/cost/models/types";
-import { HeliconePromptParams } from "@helicone-package/prompts/types";
-import { costOf } from "@helicone-package/cost";
 import { DisallowListEntry } from "../durable-objects/Wallet";
 
 type Error = {
@@ -65,11 +63,6 @@ export const getBody = async (requestWrapper: RequestWrapper) => {
     requestWrapper,
     requestWrapper.heliconeHeaders.gatewayConfig.bodyMapping
   );
-  // if (requestWrapper.heliconeHeaders.featureFlags.streamUsage) {
-  //   return enableStreamUsage(requestWrapper);
-  // }
-
-  // return await requestWrapper.getText();
 };
 
 export const authenticate = async (
@@ -269,26 +262,32 @@ const attemptDirectProviderRequest = async (
   parsedBody: any,
   env: Env,
   ctx: ExecutionContext,
-  disallowList: Set<DisallowListEntry>
+  disallowList: DisallowListEntry[]
 ): Promise<Result<Response, Error>> => {
   const { provider, modelName } = directProviderEndpoint;
-  const providerKeyWithConfig =
-    await providerKeysManager.getProviderKeyWithFetch(provider, orgId);
+  const userProviderKeyWithConfig = await providerKeysManager.getProviderKeyWithFetch(
+    provider,
+    orgId
+  );
 
-  const passthroughBillingEnabled =
-    requestWrapper.heliconeHeaders.passthroughBillingEnabled;
-  if (!passthroughBillingEnabled) {
-    if (!providerKeyWithConfig) {
-      return err({
-        type: "missing_provider_key",
-        message: "Missing/Incorrect provider key",
-        code: 400,
-      });
-    }
-    const userEndpointConfig =
-      providerKeyWithConfig.config as UserEndpointConfig;
-    // TODO: discuss with Justin+Cole:
-    // `.getPtbEndpoints`, `.createFallbackEndpoint`, and `.buildEndpoint`
+  const userEndpointConfig = {
+    ...((userProviderKeyWithConfig?.config ?? {}) as UserEndpointConfig),
+    gatewayMapping: requestWrapper.heliconeHeaders.gatewayConfig.bodyMapping,
+  };
+
+  // Try to get PTB endpoints first
+  const endpointsResult = registry.getPtbEndpoints(modelName, provider);
+  let endpoints: Endpoint[];
+  if (endpointsResult.data && endpointsResult.data.length > 0) {
+    endpoints = endpointsResult.data;
+  } else if (!userProviderKeyWithConfig) {
+    return err({
+      type: "missing_provider_key",
+      message: "Missing/Incorrect provider key, required for BYOK as no PTB endpoints found",
+      code: 400,
+    });
+  } else {
+    // Fall back to creating a custom endpoint
     const fallback = registry.createFallbackEndpoint(
       modelName,
       provider,
@@ -306,8 +305,8 @@ const attemptDirectProviderRequest = async (
       fallback.data,
       parsedBody,
       requestWrapper,
-      providerKeyWithConfig,
-      forwarder
+      userProviderKeyWithConfig,
+      forwarder,
     );
 
     if (isErr(result)) {
@@ -315,18 +314,6 @@ const attemptDirectProviderRequest = async (
     }
 
     return result;
-  }
-
-  const endpointsResult = registry.getPtbEndpoints(modelName, provider);
-  let endpoints: Endpoint[];
-  if (endpointsResult.data && endpointsResult.data.length > 0) {
-    endpoints = endpointsResult.data;
-  } else {
-    return err({
-      type: "model_not_supported",
-      message: `(Provider, Model): (${provider}, ${modelName}) is not supported`,
-      code: 400,
-    });
   }
 
   const modelProviderConfig = registry.getModelProviderConfig(
@@ -342,44 +329,73 @@ const attemptDirectProviderRequest = async (
     });
   }
 
+  if (userProviderKeyWithConfig && isByokEnabled(userProviderKeyWithConfig)) {
+    const byokEndpoint = registry.buildEndpoint(
+      modelProviderConfig.data,
+      userEndpointConfig
+    );
+
+    if (isErr(byokEndpoint)) {
+      return err({
+        type: "request_failed",
+        message: byokEndpoint.error || "Failed to build BYOK endpoint",
+        code: 500,
+      });
+    }
+    const result = await sendRequest(
+      byokEndpoint.data,
+      parsedBody,
+      requestWrapper,
+      userProviderKeyWithConfig,
+      forwarder,
+      undefined
+    );
+
+    if (!isErr(result)) {
+      return result;
+    }
+  }
+
+  // now fetch the helicone provider key since PTB must be enabled
+  // and merge the helicone api key with the user config so that we pick up their settings
+  const heliconeKeyWithConfig = await providerKeysManager.getProviderKeyWithFetch(
+    provider,
+    env.HELICONE_ORG_ID
+  );
+  if (!heliconeKeyWithConfig) {
+    return err({
+      type: "missing_provider_key",
+      message: "Missing Helicone provider key required for PTB",
+      code: 500,
+    });
+  }
+
+  const finalConfig: ProviderKey = userProviderKeyWithConfig
+    ? {
+        ...userProviderKeyWithConfig,
+        decrypted_provider_key: heliconeKeyWithConfig.decrypted_provider_key,
+        decrypted_provider_secret_key:
+          heliconeKeyWithConfig.decrypted_provider_secret_key,
+      }
+    : heliconeKeyWithConfig;
+
+
   const walletId = env.WALLET.idFromName(orgId);
   const walletStub = env.WALLET.get(walletId);
   for (const endpoint of endpoints) {
     if (!endpoint.ptbEnabled) {
-      const providerConfiguration =
-        await providerKeysManager.getProviderKeyWithFetch(
-          endpoint.provider,
-          env.HELICONE_ORG_ID
-        );
-      if (!providerConfiguration) {
-        return err({
-          type: "missing_provider_key",
-          message: "Missing/Incorrect provider key",
-          code: 400,
-        });
-      }
-
-      const result = await sendRequest(
-        endpoint,
-        parsedBody,
-        requestWrapper,
-        providerConfiguration,
-        forwarder
-      );
-
-      if (!isErr(result)) {
-        return result;
-      } else {
-        continue;
-      }
+      console.log("PTB is disabled for this endpoint, skipping");
+      continue;
     }
     // if cloud billing is enabled, we want to 'reserve' the maximum possible
     // cost of the request in their wallet so that we can avoid overages
-    const disallowListEntry = {
-      provider: endpoint.provider,
-      model: endpoint.providerModelId,
-    };
-    if (disallowList.has(disallowListEntry) || disallowList.has({ provider: endpoint.provider, model: "*" })) {
+    const isDisallowed = disallowList.some(
+      entry => 
+        (entry.provider === endpoint.provider && entry.model === endpoint.providerModelId) ||
+        (entry.provider === endpoint.provider && entry.model === "*")
+    );
+    
+    if (isDisallowed) {
       return err({
         type: "request_failed",
         message:
@@ -387,7 +403,6 @@ const attemptDirectProviderRequest = async (
         code: 400,
       });
     }
-
     const escrowReservation = await reserveEscrow(
       requestWrapper,
       env,
@@ -402,24 +417,11 @@ const attemptDirectProviderRequest = async (
       endpoint,
       model: modelName,
     };
-    const providerConfiguration =
-      await providerKeysManager.getProviderKeyWithFetch(
-        endpoint.provider,
-        env.HELICONE_ORG_ID
-      );
-    if (!providerConfiguration) {
-      return err({
-        type: "missing_provider_key",
-        message: "Missing/Incorrect provider key",
-        code: 400,
-      });
-    }
-
     const result = await sendRequest(
       endpoint,
       parsedBody,
       requestWrapper,
-      providerConfiguration,
+      finalConfig,
       forwarder,
       escrowInfo
     );
@@ -428,13 +430,11 @@ const attemptDirectProviderRequest = async (
       return result;
     }
     // Clean up escrow on error
-    if (escrowInfo) {
-      ctx.waitUntil(
-        walletStub.cancelEscrow(escrowInfo.escrowId).catch((err) => {
-          console.error(`Failed to cancel escrow ${escrowInfo.escrowId}:`, err);
-        })
-      );
-    }
+    ctx.waitUntil(
+      walletStub.cancelEscrow(escrowInfo.escrowId).catch((err) => {
+        console.error(`Failed to cancel escrow ${escrowInfo.escrowId}:`, err);
+      })
+    );
   }
 
   return err({
@@ -457,7 +457,7 @@ const attemptProvidersRequest = async (
   parsedBody: any,
   env: Env,
   ctx: ExecutionContext,
-  disallowList: Set<DisallowListEntry>
+  disallowList: DisallowListEntry[]
 ): Promise<Result<Response, Error>> => {
   const { providers } = providersEndpoint;
 
@@ -522,7 +522,7 @@ const attemptModelRequest = async ({
   parsedBody: any;
   env: Env;
   ctx: ExecutionContext;
-  disallowList: Set<DisallowListEntry>;
+  disallowList: DisallowListEntry[];
 }): Promise<Result<Response, Error>> => {
   const result = validateModelString(model);
   if (isErr(result)) {
@@ -592,12 +592,7 @@ export const attemptModelRequestWithFallback = async ({
     });
   }
 
-  if (
-    parsedBody.prompt_id ||
-    parsedBody.environment ||
-    parsedBody.version_id ||
-    parsedBody.inputs
-  ) {
+  if (parsedBody.prompt_id || parsedBody.environment || parsedBody.version_id || parsedBody.inputs) {
     const result = await promptManager.getMergedPromptBody(parsedBody, orgId);
     if (isErr(result)) {
       return err({
@@ -629,7 +624,8 @@ export const attemptModelRequestWithFallback = async ({
 
     parsedBody = result.data.body;
   }
-  let disallowList: Set<DisallowListEntry>;
+
+  let disallowList: DisallowListEntry[];
   try {
     const walletId = env.WALLET.idFromName(orgId);
     const walletStub = env.WALLET.get(walletId);
@@ -676,6 +672,12 @@ export type EscrowInfo = {
   model: string;
 };
 
+function isByokEnabled(providerKey: ProviderKey): boolean {
+  // if not set, assume true to preserve backwards compatibility
+  const legacyByokEnabled = providerKey.byok_enabled === undefined || providerKey.byok_enabled === null;
+  return legacyByokEnabled || providerKey.byok_enabled === true;
+}
+
 const reserveEscrow = async (
   requestWrapper: RequestWrapper,
   env: Env,
@@ -721,8 +723,14 @@ const reserveEscrow = async (
       requestId,
       worstCaseCost
     );
-
-    return ok(escrowResult);
+    if (isErr(escrowResult)) {
+      return err({
+        type: "request_failed",
+        message: escrowResult.error,
+        code: 500,
+      });
+    }
+    return ok(escrowResult.data);
   } catch (e) {
     return err({
       type: "request_failed",

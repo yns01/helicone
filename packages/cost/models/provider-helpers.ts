@@ -128,6 +128,8 @@ export async function authenticateRequest(
   endpoint: Endpoint,
   context: Omit<AuthContext, "endpoint">
 ): Promise<Result<AuthResult>> {
+  console.log("authenticateRequest");
+  console.log("context", JSON.stringify(context));
   const providerResult = getProvider(endpoint.provider);
   if (providerResult.error) {
     return err(providerResult.error);

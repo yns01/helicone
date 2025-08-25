@@ -68,11 +68,11 @@ export class GenericBodyProcessor implements IBodyProcessor {
     // OpenAI charges for input, input cache read, output, output audio, input audio.
     const usage = response.usage;
     const effectivePromptTokens = usage?.prompt_tokens !== undefined
-        ? usage.prompt_tokens
-        : usage?.input_tokens ?? 0;
+        ? Math.max(0, (usage.prompt_tokens ?? 0) - (usage.prompt_tokens_details?.cached_tokens ?? 0) - (usage.prompt_tokens_details?.audio_tokens ?? 0))
+        : usage?.input_tokens;
     const effectiveCompletionTokens = usage?.completion_tokens !== undefined
-        ? usage.completion_tokens
-        : usage?.output_tokens ?? 0;
+        ? Math.max(0, (usage.completion_tokens ?? 0) - (usage.completion_tokens_details?.audio_tokens ?? 0))
+        : usage?.output_tokens;
 
     return {
       promptTokens: effectivePromptTokens,

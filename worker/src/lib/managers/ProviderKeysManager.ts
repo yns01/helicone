@@ -31,10 +31,6 @@ export class ProviderKeysManager {
     orgId: string,
     key: ProviderKey
   ) {
-    if (this.env.ENVIRONMENT !== "development") {
-      return;
-    }
-
     await storeInCache(
       `provider_keys_${provider}_${orgId}`,
       JSON.stringify(key),
@@ -77,6 +73,7 @@ export class ProviderKeysManager {
         JSON.stringify(key),
         this.env
       );
+      console.log("stored key in cache, returning");
       return key;
     }
     return key;

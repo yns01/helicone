@@ -1,6 +1,6 @@
 import generateApiKey from "generate-api-key";
 import { uuid } from "uuidv4";
-import { Database } from "../../lib/db/database.types";
+import { Database, Json } from "../../lib/db/database.types";
 import { AuthParams } from "../../packages/common/auth/types";
 import { dbExecute } from "../../lib/shared/db/dbExecute";
 import { Result, err, ok } from "../../packages/common/result";
@@ -9,10 +9,21 @@ import { BaseManager } from "../BaseManager";
 import { DecryptedProviderKey } from "../VaultManager";
 import { ProviderName } from "@helicone-package/cost/models/providers";
 import { dbProviderToProvider } from "@helicone-package/cost/models/provider-helpers";
+import { CreateProviderKeyRequest, UpdateProviderKeyRequest } from "../../controllers/public/apiKeyController";
+
+export type ProviderKey = {
+  providerName: ProviderName;
+  providerKey: string;
+  providerSecretKey?: string;
+  providerKeyName: string;
+  byokEnabled: boolean;
+  config: Json;
+};
 
 type HashedPasswordRow = {
   hashed_password: string;
 };
+
 
 export class KeyManager extends BaseManager {
   constructor(authParams: AuthParams) {
@@ -215,7 +226,7 @@ export class KeyManager extends BaseManager {
   async getProviderKeys(): Promise<Result<any[], string>> {
     try {
       const result = await dbExecute(
-        `SELECT *
+        `SELECT *, COALESCE(byok_enabled, false) as byok_enabled
          FROM provider_keys
          WHERE org_id = $1
          AND soft_delete = false
@@ -236,20 +247,15 @@ export class KeyManager extends BaseManager {
   /**
    * Create a provider key
    */
-  async createProviderKey(data: {
-    providerName: string;
-    providerKeyName: string;
-    providerKey: string;
-    providerSecretKey?: string;
-    config: Record<string, string>;
-  }): Promise<Result<{ id: string }, string>> {
+  async createProviderKey(data: CreateProviderKeyRequest): Promise<Result<{ id: string }, string>> {
     try {
       const {
         providerName,
-        providerKey,
         providerKeyName,
-        config,
+        providerKey,
         providerSecretKey,
+        config,
+        byokEnabled,
       } = data;
 
       // Check if a key already exists for this provider
@@ -279,8 +285,8 @@ export class KeyManager extends BaseManager {
 
       // Insert the new key
       const result = await dbExecute<{ id: string }>(
-        `INSERT INTO provider_keys (provider_name, provider_key_name, provider_key, provider_secret_key, org_id, soft_delete, config)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO provider_keys (provider_name, provider_key_name, provider_key, provider_secret_key, org_id, soft_delete, config, byok_enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id`,
         [
           providerName,
@@ -290,6 +296,7 @@ export class KeyManager extends BaseManager {
           this.authParams.organizationId,
           false,
           config,
+          byokEnabled,
         ]
       );
 
@@ -307,17 +314,12 @@ export class KeyManager extends BaseManager {
   /**
    * Update a provider key
    */
-  async updateProviderKey(params: {
-    providerKeyId: string;
-    providerKey?: string;
-    providerSecretKey?: string;
-    config?: Record<string, string>;
-  }): Promise<Result<{ id: string; providerName: string }, string>> {
+  async updateProviderKey(id: string, params: UpdateProviderKeyRequest): Promise<Result<ProviderKey, string>> {
     try {
-      const { providerKeyId, providerKey, providerSecretKey, config } = params;
+      const { providerKey, providerSecretKey, config, byokEnabled } = params;
 
       // Verify the key belongs to this organization
-      const hasAccess = await this.hasAccessToProviderKey(providerKeyId);
+      const hasAccess = await this.hasAccessToProviderKey(id);
       if (hasAccess.error) {
         return err(hasAccess.error);
       }
@@ -327,11 +329,9 @@ export class KeyManager extends BaseManager {
       const values = [];
       let paramIndex = 1;
 
-      updateParts.push(`provider_key = $${paramIndex++}`);
       if (providerKey !== "" && providerKey !== undefined) {
+        updateParts.push(`provider_key = $${paramIndex++}`);
         values.push(providerKey);
-      } else {
-        values.push(null);
       }
 
       if (providerSecretKey !== "" && providerSecretKey !== undefined) {
@@ -344,12 +344,17 @@ export class KeyManager extends BaseManager {
         values.push(config);
       }
 
+      if (byokEnabled !== undefined) {
+        updateParts.push(`byok_enabled = $${paramIndex++}`);
+        values.push(byokEnabled);
+      }
+
       if (updateParts.length === 0) {
         return err("No fields to update");
       }
 
       // Add the WHERE conditions
-      values.push(providerKeyId, this.authParams.organizationId);
+      values.push(id, this.authParams.organizationId);
 
       // Update the key
       const result = await dbExecute<{
@@ -368,9 +373,48 @@ export class KeyManager extends BaseManager {
         return err(`Failed to update provider key: ${result.error}`);
       }
 
+      // Fetch the complete updated provider key data
+      const updatedKeyResult = await dbExecute<{
+        id: string;
+        org_id: string;
+        provider_name: string;
+        provider_key_name: string;
+        decrypted_provider_key: string;
+        decrypted_provider_secret_key: string | null;
+        auth_type: "key" | "session_token";
+        config: Json;
+        byok_enabled: boolean;
+      }>(
+        `SELECT 
+          id,
+          org_id, 
+          provider_name,
+          provider_key_name,
+          decrypted_provider_key,
+          decrypted_provider_secret_key,
+          auth_type,
+          config,
+          byok_enabled
+         FROM decrypted_provider_keys_v2
+         WHERE id = $1
+         AND org_id = $2
+         AND soft_delete = false
+         LIMIT 1`,
+        [id, this.authParams.organizationId]
+      );
+
+      if (updatedKeyResult.error || !updatedKeyResult.data || updatedKeyResult.data.length === 0) {
+        return err("Failed to fetch updated provider key");
+      }
+
+      const updatedKey = updatedKeyResult.data[0];
       return ok({
-        id: result.data[0].id,
-        providerName: result.data[0].provider_name,
+        providerName: updatedKey.provider_name as ProviderName,
+        providerKey: updatedKey.decrypted_provider_key,
+        providerSecretKey: updatedKey.decrypted_provider_secret_key ?? undefined,
+        providerKeyName: updatedKey.provider_key_name,
+        config: updatedKey.config,
+        byokEnabled: updatedKey.byok_enabled,
       });
     } catch (error) {
       return err(`Failed to update provider key: ${error}`);

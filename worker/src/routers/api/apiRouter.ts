@@ -4,6 +4,7 @@ import { Job, isValidStatus, validateRun } from "../../lib/models/Runs";
 import { HeliconeNode, validateHeliconeNode } from "../../lib/models/Tasks";
 import { validateAlertCreate } from "../../lib/util/validators/alertValidators";
 import crypto, { timingSafeEqual } from "crypto";
+import { HMACAuth } from "../../lib/util/hmacAuth";
 
 import { OpenAPIRouterType } from "@cloudflare/itty-router-openapi";
 import { Route } from "itty-router";
@@ -19,6 +20,17 @@ import { BaseOpenAPIRouter } from "../routerFactory";
 import { isErr } from "../../lib/util/results";
 import { createSupabaseClient } from "../../lib/util/helpers";
 import { StripeManager } from "../../lib/managers/StripeManager";
+
+export type SetProviderKeyRequest = {
+  providerName: ProviderName;
+  providerKey: string;
+  providerSecretKey?: string;
+  providerKeyName: string;
+  authType: "key" | "session_token";
+  byokEnabled: boolean;
+  config: Json;
+  orgId: string;
+};
 
 function getAPIRouterV1(
   router: OpenAPIRouterType<
@@ -81,26 +93,44 @@ function getAPIRouterV1(
   );
 
   router.post(
-    "/mock-set-provider-key",
+    "/provider/key",
     async (
       _,
       requestWrapper: RequestWrapper,
       env: Env,
       ctx: ExecutionContext
     ) => {
-      if (env.ENVIRONMENT !== "development") {
-        return new Response("not allowed", { status: 403 });
+      const data = await requestWrapper.getJson<SetProviderKeyRequest>();
+      if (!data) {
+        return new Response("Invalid JSON body", { status: 400 });
       }
-
-      const data = await requestWrapper.getJson<{
-        provider: ProviderName;
-        decryptedProviderKey: string;
-        decryptedProviderSecretKey: string;
-        authType: "key" | "session_token";
-        config: Json | null;
-        orgId: string;
-        softDelete?: boolean;
-      }>();
+      // Require HMAC authentication for service-to-service calls
+      const hmacSignature = requestWrapper.headers.get("X-HMAC-Signature");
+      const timestamp = requestWrapper.headers.get("X-Timestamp");
+      
+      if (!hmacSignature || !timestamp) {
+        return new Response("Missing HMAC authentication headers", { status: 401 });
+      }
+      if (!env.HELICONE_SERVICE_HMAC_SECRET) {
+        console.error("HELICONE_SERVICE_HMAC_SECRET not configured");
+        return new Response("Server configuration error", { status: 500 });
+      }
+      
+      // Verify HMAC signature for service-to-service auth
+      const hmacAuth = new HMACAuth({ secret: env.HELICONE_SERVICE_HMAC_SECRET });
+      
+      const isValid = await hmacAuth.verifySignature(
+        hmacSignature,
+        "POST",
+        "/provider/key",
+        parseInt(timestamp, 10),
+        data
+      );
+      
+      if (!isValid) {
+        console.error("Invalid HMAC signature");
+        return new Response("Unauthorized", { status: 401 });
+      }
 
       const supabaseClientUS = createClient<Database>(
         env.SUPABASE_URL,
@@ -110,31 +140,35 @@ function getAPIRouterV1(
         env.EU_SUPABASE_URL,
         env.EU_SUPABASE_SERVICE_ROLE_KEY
       );
-      const providerKey: ProviderKey = {
-        provider: data.provider,
-        org_id: data.orgId,
-        decrypted_provider_key: data.decryptedProviderKey,
-        decrypted_provider_secret_key: data.decryptedProviderSecretKey,
-        auth_type: data.authType,
-        config: data.config,
-      };
-
       const providerKeysManagerUS = new ProviderKeysManager(
         new ProviderKeysStore(supabaseClientUS),
         env
       );
-      await providerKeysManagerUS.setProviderKey(
-        data.provider,
-        data.orgId,
-        providerKey
-      );
-
       const providerKeysManagerEU = new ProviderKeysManager(
         new ProviderKeysStore(supabaseClientEU),
         env
       );
+
+      const providerKey: ProviderKey = {
+        provider: data.providerName,
+        org_id: data.orgId,
+        decrypted_provider_key:
+          data.providerKey,
+        decrypted_provider_secret_key:
+          data.providerSecretKey ?? null,
+        auth_type: data.authType,
+        config: data.config,
+        byok_enabled: data.byokEnabled,
+      };
+
+      await providerKeysManagerUS.setProviderKey(
+        data.providerName,
+        data.orgId,
+        providerKey
+      );
+
       await providerKeysManagerEU.setProviderKey(
-        data.provider,
+        data.providerName,
         data.orgId,
         providerKey
       );
@@ -579,7 +613,6 @@ function getAPIRouterV1(
       env: Env,
       _ctx: ExecutionContext
     ) => {
-      // Simple shared secret auth with timing-safe comparison
       const authHeader = requestWrapper.headers.get("Authorization");
       if (!authHeader || !authHeader.startsWith("Bearer ")) {
         return new Response("Unauthorized", { status: 401 });
@@ -636,12 +669,11 @@ function getAPIRouterV1(
         env: Env,
         _ctx: ExecutionContext
       ) => {
-      const client = await createAPIClient(env, _ctx, requestWrapper);
+        const client = await createAPIClient(env, _ctx, requestWrapper);
         if (!orgId || Array.isArray(orgId)) {
           return new Response("orgId is required and must be a string", { status: 400 });
         }
         
-        // Simple shared secret auth with timing-safe comparison
         const authHeader = requestWrapper.headers.get("Authorization");
         if (!authHeader || !authHeader.startsWith("Bearer ")) {
           return new Response("Unauthorized", { status: 401 });
@@ -729,16 +761,21 @@ function getAPIRouterV1(
     "*",
     async (
       _,
-      _requestWrapper: RequestWrapper,
+      requestWrapper: RequestWrapper,
       _env: Env,
       _ctx: ExecutionContext
     ) => {
+      console.log("options request");
+      const origin = requestWrapper.headers.get("origin") || "*";
       return new Response(null, {
         headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Methods": "DELETE, POST, GET, PUT",
+          "Access-Control-Allow-Origin": origin,
+          "Vary": "Origin",
+          "Access-Control-Allow-Credentials": "true",
+          "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
           "Access-Control-Allow-Headers":
-            "Content-Type, helicone-jwt, helicone-org-id",
+            "Content-Type, helicone-jwt, helicone-org-id, helicone-authorization, Authorization",
+          "Access-Control-Max-Age": "86400",
         },
       });
     }

@@ -1,38 +1,49 @@
-import { ProviderName } from "@helicone-package/cost/models/providers";
-import { Json } from "./db/database.types";
+import { type ProviderName } from "@helicone-package/cost/models/providers";
 import { removeFromCache, storeInCache } from "./clients/cloudflareKV";
 import { ENVIRONMENT } from "./clients/constant";
-
-type ProviderKey = {
-  provider: ProviderName;
-  decrypted_provider_key: string;
-  decrypted_provider_secret_key: string;
-  auth_type: "key" | "session_token";
-  config: Json | null;
-  orgId: string;
-};
+import { HMACAuth } from "./hmacAuth";
+import { type CreateProviderKeyRequest } from "../controllers/public/apiKeyController";
 
 export const MAX_RETRIES = 3;
-async function setProviderKeyDev(
-  providerKey: ProviderKey,
+
+
+export async function setProviderKey(
+  orgId: string,
+  providerKey: CreateProviderKeyRequest,
   retries = MAX_RETRIES
 ) {
   try {
+    const body = {
+      providerName: providerKey.providerName,
+      providerKey: providerKey.providerKey,
+      providerSecretKey: providerKey.providerSecretKey,
+      providerKeyName: providerKey.providerKeyName,
+      config: providerKey.config,
+      orgId,
+      byokEnabled: providerKey.byokEnabled,
+      authType: "key",
+    };
+    console.log("sending provider key to worker to set in cache", body);
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    const hmacAuth = new HMACAuth({ secret: process.env.HELICONE_SERVICE_HMAC_SECRET! });
+
+    // Add HMAC authentication headers if configured
+    const hmacHeaders = hmacAuth.createAuthHeaders(
+      "POST",
+      `/provider/key`,
+      body
+    );
+    Object.assign(headers, hmacHeaders);
+
     const res = await fetch(
-      `${process.env.HELICONE_WORKER_API}/mock-set-provider-key`,
+      `${process.env.HELICONE_WORKER_API}/provider/key`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          provider: providerKey.provider,
-          decryptedProviderKey: providerKey.decrypted_provider_key,
-          decryptedProviderSecretKey: providerKey.decrypted_provider_secret_key,
-          authType: providerKey.auth_type,
-          config: providerKey.config,
-          orgId: providerKey.orgId,
-        }),
+        headers,
+        body: JSON.stringify(body),
       }
     );
     if (!res.ok) {
@@ -41,22 +52,11 @@ async function setProviderKeyDev(
         await new Promise((resolve) =>
           setTimeout(resolve, 10_000 * (MAX_RETRIES - retries))
         );
-        await setProviderKeyDev(providerKey, retries - 1);
+        await setProviderKey(orgId, providerKey, retries - 1);
       }
     }
   } catch (e) {
     console.error(e);
-  }
-}
-
-export async function setProviderKey(providerKey: ProviderKey) {
-  if (ENVIRONMENT === "production") {
-    await storeInCache(
-      `provider_keys_${providerKey.provider}_${providerKey.orgId}`,
-      JSON.stringify(providerKey)
-    );
-  } else {
-    await setProviderKeyDev(providerKey);
   }
 }
 

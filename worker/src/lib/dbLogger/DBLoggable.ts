@@ -31,6 +31,7 @@ import { costOfPrompt } from "@helicone-package/cost";
 import { HeliconeProducer } from "../clients/producers/HeliconeProducer";
 import { MessageData } from "../clients/producers/types";
 import { DEFAULT_UUID } from "@helicone-package/llm-mapper/types";
+import { EscrowInfo } from "../util/aiGateway";
 
 export interface DBLoggableProps {
   response: {
@@ -66,6 +67,7 @@ export interface DBLoggableProps {
     request_ip: string | null;
     country_code: string | null;
     requestReferrer: string | null;
+    escrowInfo?: EscrowInfo;
   };
   timing: {
     startTime: Date;
@@ -733,7 +735,7 @@ export class DBLoggable {
         promptVersionId: this.request.prompt2025Settings.promptVersionId,
         promptInputs: this.request.prompt2025Settings.promptInputs,
         promptEnvironment: this.request.prompt2025Settings.environment,
-        isPassthroughBilling: requestHeaders.passthroughBillingEnabled ?? undefined,
+        isPassthroughBilling: this.request.escrowInfo ? true : false,
       },
       log: {
         request: {

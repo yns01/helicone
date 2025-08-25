@@ -1,10 +1,11 @@
-import { SELF, fetchMock } from "cloudflare:test";
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { SELF, fetchMock, env } from "cloudflare:test";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import { registry } from "@helicone-package/cost/models/registry";
 import { UserEndpointConfig } from "@helicone-package/cost/models/types";
 import "../setup";
 import { type TestCase } from "../providers/base.test-config";
 import { anthropicTestConfig } from "../providers/anthropic.test-config";
+import { ok } from "../../../packages/common/result";
 
 function mockRequiredServices() {
   const callTrackers = {
@@ -99,6 +100,40 @@ describe("Registry Tests", () => {
     fetchMock.activate();
     fetchMock.disableNetConnect();
     mockRequiredServices();
+    
+    // Mock KV namespaces
+    const mockKVNamespace = {
+      get: vi.fn().mockResolvedValue(null),
+      put: vi.fn().mockResolvedValue(undefined),
+      delete: vi.fn().mockResolvedValue(undefined),
+      list: vi.fn().mockResolvedValue({ keys: [] }),
+      getWithMetadata: vi.fn().mockResolvedValue({ value: null, metadata: null }),
+    };
+    
+    (env as any).SECURE_CACHE = mockKVNamespace;
+    (env as any).EU_SECURE_CACHE = mockKVNamespace;
+    (env as any).CACHE_KV = mockKVNamespace;
+    (env as any).RATE_LIMIT_KV = mockKVNamespace;
+    (env as any).INSERT_KV = mockKVNamespace;
+    (env as any).UTILITY_KV = mockKVNamespace;
+    (env as any).REQUEST_AND_RESPONSE_QUEUE_KV = mockKVNamespace;
+    
+    // Mock Wallet Durable Object with proper async functions
+    const mockWalletStub = {
+      getDisallowList: async () => [],
+      reserveCostInEscrow: async (orgId: string, requestId: string, amount: number) => ok({ escrowId: 'test-escrow-id' }),
+      cancelEscrow: async (escrowId: string) => undefined,
+      finalizeEscrow: async (orgId: string, escrowId: string, actualCost: number) => ({ clickhouseLastCheckedAt: Date.now() })
+    };
+    
+    // Override the env.WALLET namespace
+    (env as any).WALLET = {
+      idFromName: (name: string) => `wallet-id-${name}`,
+      get: (id: string) => mockWalletStub
+    };
+    
+    // Also set HELICONE_ORG_ID for PTB tests
+    (env as any).HELICONE_ORG_ID = 'helicone-org-id';
   });
 
   afterAll(() => {

@@ -52,7 +52,8 @@ export async function proxyForwarder(
     await new HeliconeProxyRequestMapper(
       request,
       provider,
-      env
+      env,
+      escrowInfo
     ).tryToProxyRequest();
 
   if (proxyRequestError !== null) {
@@ -117,7 +118,6 @@ export async function proxyForwarder(
                 "false", // S3_ENABLED
                 cachedResponse,
                 cacheSettings,
-                escrowInfo
               )
             );
 
@@ -240,7 +240,6 @@ export async function proxyForwarder(
             undefined,
             undefined,
             undefined,
-            escrowInfo
           )
         );
 
@@ -310,8 +309,7 @@ export async function proxyForwarder(
           rateLimited,
           undefined,
           undefined,
-          undefined,
-          escrowInfo
+          undefined
         )
       );
 
@@ -407,7 +405,6 @@ export async function proxyForwarder(
         undefined,
         undefined,
         undefined,
-        escrowInfo
       )
     );
   }
@@ -453,7 +450,6 @@ async function log(
   S3_ENABLED?: Env["S3_ENABLED"],
   cachedResponse?: Response,
   cacheSettings?: CacheSettings,
-  escrowInfo?: EscrowInfo
 ) {
   const { data: auth, error: authError } = await request.auth();
 
@@ -515,14 +511,12 @@ async function log(
   }
   const walletId = env.WALLET.idFromName(orgData.organizationId);
   const walletStub = env.WALLET.get(walletId);
-  const passthroughBillingEnabled =
-    proxyRequest?.requestWrapper.heliconeHeaders.passthroughBillingEnabled;
-  if (passthroughBillingEnabled && res.data && escrowInfo) {
+  if (res.data && proxyRequest.escrowInfo) {
     const cost = res.data.cost;
     try {
       const { clickhouseLastCheckedAt } = await walletStub.finalizeEscrow(
         orgData.organizationId,
-        escrowInfo.escrowId,
+        proxyRequest.escrowInfo.escrowId,
         cost
       );
       if (
@@ -534,7 +528,7 @@ async function log(
         await walletStub.addToDisallowList(
           proxyRequest.requestId,
           proxyRequest.provider,
-          escrowInfo.model ?? "*"
+          proxyRequest.escrowInfo.model ?? "*"
         );
       }
 
@@ -586,10 +580,8 @@ async function log(
         }
       }
     } catch (error) {
-      console.error(`Error finalizing escrow ${escrowInfo.escrowId}:`, error);
+      console.error(`Error finalizing escrow ${proxyRequest.escrowInfo.escrowId}:`, error);
     }
-  } else if (passthroughBillingEnabled && !escrowInfo) {
-    console.error("No escrow info, could not finalize escrow");
   }
 
   // if not a cached response, incur rate limits

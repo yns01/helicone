@@ -11,6 +11,11 @@ export default defineWorkersConfig({
           bindings: {
             // Force WORKER_TYPE for testing AI Gateway
             WORKER_TYPE: "AI_GATEWAY_API",
+            HELICONE_ORG_ID: "helicone-org-id",
+          },
+          kvNamespaces: ["CACHE_KV", "SECURE_CACHE", "EU_SECURE_CACHE", "RATE_LIMIT_KV", "INSERT_KV", "UTILITY_KV", "REQUEST_AND_RESPONSE_QUEUE_KV"],
+          durableObjects: {
+            WALLET: "Wallet",
           },
         },
       },

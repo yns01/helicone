@@ -34,7 +34,10 @@ export const useProvider = ({ provider }: UseProviderParams = {}) => {
       const response = await jawnClient.GET("/v1/api-keys/provider-keys", {});
 
       if (response && "error" in response) {
-        logger.error({ error: response.error, orgId }, "Failed to fetch provider keys");
+        logger.error(
+          { error: response.error, orgId },
+          "Failed to fetch provider keys",
+        );
         return [] as ProviderKey[];
       }
 
@@ -44,6 +47,16 @@ export const useProvider = ({ provider }: UseProviderParams = {}) => {
   });
 
   // Get provider-specific data
+  /*
+
+
+export type UpdateProviderKeyRequest = {
+  providerKey?: string;
+  providerSecretKey?: string;
+  config?: Record<string, string>;
+  byokEnabled?: boolean;
+};
+  */
 
   // Mutation to create/update provider key
   const updateProviderKey = useMutation({
@@ -54,6 +67,7 @@ export const useProvider = ({ provider }: UseProviderParams = {}) => {
       keyId,
       providerKeyName,
       config,
+      byokEnabled,
     }: {
       providerName: string;
       key?: string;
@@ -61,6 +75,7 @@ export const useProvider = ({ provider }: UseProviderParams = {}) => {
       keyId: string;
       providerKeyName: string;
       config?: Record<string, any>;
+      byokEnabled: boolean;
     }) => {
       if (!orgId) throw new Error("No organization selected");
 
@@ -76,6 +91,7 @@ export const useProvider = ({ provider }: UseProviderParams = {}) => {
           providerKey: key,
           providerSecretKey: secretKey,
           config,
+          byokEnabled,
         },
       });
     },
@@ -97,12 +113,14 @@ export const useProvider = ({ provider }: UseProviderParams = {}) => {
       secretKey,
       providerKeyName,
       config,
+      byokEnabled,
     }: {
       providerName: string;
       key: string;
       secretKey?: string;
       providerKeyName: string;
       config?: Record<string, any>;
+      byokEnabled: boolean;
     }) => {
       if (!orgId) throw new Error("No organization selected");
       const jawnClient = getJawnClient(orgId);
@@ -115,13 +133,17 @@ export const useProvider = ({ provider }: UseProviderParams = {}) => {
             providerSecretKey: secretKey,
             providerKeyName,
             config: config || {},
+            byokEnabled,
           },
         });
 
         if (response.error) throw new Error(response);
         return response.data;
       } catch (error) {
-        logger.error({ error, providerName, providerKeyName, orgId }, "Error adding provider key");
+        logger.error(
+          { error, providerName, providerKeyName, orgId },
+          "Error adding provider key",
+        );
         throw error;
       }
     },
@@ -158,7 +180,10 @@ export const useProvider = ({ provider }: UseProviderParams = {}) => {
       );
 
       if (response && "error" in response) {
-        logger.error({ error: response.error, keyId, orgId }, "Failed to fetch decrypted key");
+        logger.error(
+          { error: response.error, keyId, orgId },
+          "Failed to fetch decrypted key",
+        );
         return null;
       }
 

@@ -67,23 +67,33 @@ vi.mock('@supabase/supabase-js', () => ({
       if (table === 'decrypted_provider_keys_v2') {
         // Return provider key for Anthropic
         let eqCount = 0;
-        chainObj.eq = vi.fn(() => {
+        let orgId = '';
+        let providerName = '';
+        chainObj.eq = vi.fn((field: string, value: any) => {
           eqCount++;
+          if (field === 'organization_id' || field === 'org_id') {
+            orgId = value;
+          }
+          if (field === 'provider_name') {
+            providerName = value;
+          }
           // After third eq() call (provider_name, org_id, soft_delete), we're done
           if (eqCount === 3) {
             return {
               ...chainObj,
-              then: (resolve: any) => resolve({
-                data: [{
-                  org_id: 'test-org-id',
-                  provider_name: 'ANTHROPIC',
+              then: (resolve: any) => {
+                // Return keys for both test org and helicone org (needed for PTB)
+                const data = [{
+                  org_id: orgId,
+                  provider_name: providerName || 'ANTHROPIC',
                   decrypted_provider_key: 'test-anthropic-api-key',
                   decrypted_provider_secret_key: null,
                   auth_type: 'api_key',
+                  byok_enabled: true,
                   config: {}
-                }],
-                error: null
-              })
+                }];
+                resolve({ data, error: null });
+              }
             };
           }
           return chainObj;

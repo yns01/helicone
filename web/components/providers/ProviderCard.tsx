@@ -10,6 +10,7 @@ import {
   Save,
   ChevronDown,
   ChevronUp,
+  Info,
 } from "lucide-react";
 import { Provider } from "@/types/provider";
 import { useProvider } from "@/hooks/useProvider";
@@ -25,6 +26,7 @@ import { Label } from "../ui/label";
 import { Checkbox } from "../ui/checkbox";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/telemetry/logger";
+import { Switch } from "@/components/ui/switch";
 
 // ====== Types ======
 interface ProviderCardProps {
@@ -44,6 +46,7 @@ interface ProviderCardState {
     isVisible: boolean;
     values: Record<string, string>;
   };
+  byokEnabled: boolean;
 }
 
 // Define action types
@@ -60,6 +63,7 @@ type ProviderCardAction =
   | { type: "TOGGLE_CONFIG_VISIBILITY" }
   | { type: "UPDATE_CONFIG_FIELD"; payload: { key: string; value: string } }
   | { type: "INITIALIZE_CONFIG"; payload: Record<string, string> }
+  | { type: "SET_BYOK_ENABLED"; payload: boolean }
   | { type: "RESET_VIEW" };
 
 // ====== Component ======
@@ -77,7 +81,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider }) => {
   // ====== Reducer ======
   const getInitialState = (): ProviderCardState => {
     // Initialize with empty defaults based on provider
-    let initialConfig = {};
+    let initialConfig: Record<string, string> = {};
     if (provider.id === "azure") {
       initialConfig = {
         baseUri: "",
@@ -106,6 +110,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider }) => {
         isVisible: false,
         values: initialConfig,
       },
+      byokEnabled: false,
     };
   };
 
@@ -218,6 +223,12 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider }) => {
           },
         };
 
+      case "SET_BYOK_ENABLED":
+        return {
+          ...state,
+          byokEnabled: action.payload,
+        };
+
       case "RESET_VIEW":
         return {
           ...state,
@@ -244,18 +255,32 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider }) => {
     provider.id === "aws" ||
     provider.id === "vertex";
 
+  // Check if byok_enabled has changed from the original value
+  const byokEnabledChanged = existingKey
+    ? (existingKey.byok_enabled ?? false) !== state.byokEnabled
+    : false;
+  const hasUnsavedChanges = byokEnabledChanged || !!state.key.value;
+
   // ====== Effects ======
-  // Initialize config from existing key
+  // Initialize config and byok_enabled from existing key
   useEffect(() => {
-    if (existingKey?.config) {
-      try {
-        dispatch({
-          type: "INITIALIZE_CONFIG",
-          payload: existingKey.config as Record<string, string>,
-        });
-      } catch (error) {
-        logger.error({ error, existingKey }, "Error parsing config");
+    if (existingKey) {
+      // Initialize config if it exists
+      if (existingKey.config) {
+        try {
+          dispatch({
+            type: "INITIALIZE_CONFIG",
+            payload: existingKey.config as Record<string, string>,
+          });
+        } catch (error) {
+          logger.error({ error, existingKey }, "Error parsing config");
+        }
       }
+      // Initialize byok_enabled
+      dispatch({
+        type: "SET_BYOK_ENABLED",
+        payload: existingKey.byok_enabled ?? false,
+      });
     }
   }, [existingKey]);
 
@@ -320,6 +345,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider }) => {
           keyId: existingKey.id,
           providerKeyName: `${provider.name} API Key`,
           config: state.config.values,
+          byokEnabled: state.byokEnabled,
         });
       } else {
         // Otherwise create a new key using addProviderKey mutation
@@ -329,6 +355,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider }) => {
           secretKey: state.key.secretValue,
           providerKeyName: `${provider.name} API Key`,
           config: state.config.values,
+          byokEnabled: state.byokEnabled,
         });
       }
     } catch (error) {
@@ -476,7 +503,13 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider }) => {
               <Input
                 type={isViewingKey ? "text" : "password"}
                 placeholder={
-                  isEditMode ? "••••••••••••••••" : provider.apiKeyPlaceholder
+                  isViewingKey &&
+                  (state.key.decryptedValue === "" ||
+                    state.key.decryptedValue == null)
+                    ? undefined
+                    : isEditMode
+                      ? "••••••••••••••••"
+                      : provider.apiKeyPlaceholder
                 }
                 value={
                   isViewingKey && state.key.decryptedValue
@@ -494,7 +527,15 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider }) => {
                 <Label>Secret key</Label>
                 <Input
                   type={isViewingKey ? "text" : "password"}
-                  placeholder={isEditMode ? "••••••••••••••••" : "..."}
+                  placeholder={
+                    isViewingKey &&
+                    (state.key.decryptedSecretValue === "" ||
+                      state.key.decryptedSecretValue == null)
+                      ? undefined
+                      : isEditMode
+                        ? "••••••••••••••••"
+                        : "..."
+                  }
                   value={
                     isViewingKey && state.key.decryptedSecretValue
                       ? state.key.decryptedSecretValue
@@ -570,11 +611,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider }) => {
               >
                 {isSavingKey ? (
                   "Saving..."
-                ) : isSavedKey ? (
+                ) : isSavedKey && !byokEnabledChanged ? (
                   <>
                     <Check className="h-3.5 w-3.5" /> Saved
                   </>
-                ) : isEditMode ? (
+                ) : isEditMode || byokEnabledChanged ? (
                   <>
                     <Save className="h-3.5 w-3.5" /> Update
                   </>
@@ -585,6 +626,44 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({ provider }) => {
                 )}
               </Button>
             </div>
+          </div>
+
+          {/* AI Gateway toggle - integrated with key settings */}
+          <div className="mt-2 flex items-center justify-between gap-2 rounded-md bg-muted/30 px-2 py-1.5">
+            <div className="flex items-center gap-1">
+              <label
+                htmlFor="ai-gateway-toggle"
+                className="cursor-pointer select-none text-xs text-muted-foreground"
+                onClick={() =>
+                  dispatch({
+                    type: "SET_BYOK_ENABLED",
+                    payload: !state.byokEnabled,
+                  })
+                }
+              >
+                Enable for AI Gateway
+              </label>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3 w-3 text-muted-foreground/70" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {state.byokEnabled
+                      ? "This key is currently used for AI Gateway requests"
+                      : "When disabled, Helicone credits will be used for AI Gateway requests"}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <Switch
+              checked={state.byokEnabled}
+              onCheckedChange={(checked) =>
+                dispatch({ type: "SET_BYOK_ENABLED", payload: checked })
+              }
+              size="md"
+              className="data-[state=checked]:bg-primary data-[state=unchecked]:bg-gray-200 dark:data-[state=unchecked]:bg-gray-700"
+            />
           </div>
 
           {/* Advanced config toggle */}

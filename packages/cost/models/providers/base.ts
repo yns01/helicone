@@ -31,6 +31,7 @@ export abstract class BaseProvider {
   }
 
   authenticate(context: AuthContext): AuthResult | Promise<AuthResult> {
+    console.log("base class authenticate, apiKey", context.apiKey);
     return {
       headers: {
         Authorization: `Bearer ${context.apiKey || ""}`,

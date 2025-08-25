@@ -40,6 +40,28 @@ export interface paths {
   "/v1/user/query": {
     post: operations["GetUsers"];
   };
+  "/v1/api-keys/provider-key/{providerKeyId}": {
+    get: operations["GetProviderKey"];
+    delete: operations["DeleteProviderKey"];
+    patch: operations["UpdateProviderKey"];
+  };
+  "/v1/api-keys/provider-key": {
+    post: operations["CreateProviderKey"];
+  };
+  "/v1/api-keys/provider-keys": {
+    get: operations["GetProviderKeys"];
+  };
+  "/v1/api-keys": {
+    get: operations["GetAPIKeys"];
+    post: operations["CreateAPIKey"];
+  };
+  "/v1/api-keys/proxy-key": {
+    post: operations["CreateProxyKey"];
+  };
+  "/v1/api-keys/{apiKeyId}": {
+    delete: operations["DeleteAPIKey"];
+    patch: operations["UpdateAPIKey"];
+  };
   "/v1/evaluator": {
     post: operations["CreateEvaluator"];
   };
@@ -616,28 +638,6 @@ export interface paths {
   "/v1/credits/totalSpend": {
     get: operations["GetTotalSpend"];
   };
-  "/v1/api-keys/provider-key/{providerKeyId}": {
-    get: operations["GetProviderKey"];
-    delete: operations["DeleteProviderKey"];
-    patch: operations["UpdateProviderKey"];
-  };
-  "/v1/api-keys/provider-key": {
-    post: operations["CreateProviderKey"];
-  };
-  "/v1/api-keys/provider-keys": {
-    get: operations["GetProviderKeys"];
-  };
-  "/v1/api-keys": {
-    get: operations["GetAPIKeys"];
-    post: operations["CreateAPIKey"];
-  };
-  "/v1/api-keys/proxy-key": {
-    post: operations["CreateProxyKey"];
-  };
-  "/v1/api-keys/{apiKeyId}": {
-    delete: operations["DeleteAPIKey"];
-    patch: operations["UpdateAPIKey"];
-  };
   "/v1/public/alert-banner": {
     get: operations["GetAlertBanners"];
     patch: operations["UpdateAlertBannerActive"];
@@ -970,6 +970,52 @@ export interface components {
         startTimeUnixSeconds: number;
       };
     };
+    /** @description Construct a type with a set of properties K of type T */
+    "Record_string.string_": {
+      [key: string]: string;
+    };
+    CreateProviderKeyRequest: {
+      config: components["schemas"]["Record_string.string_"];
+      byokEnabled: boolean;
+      providerKeyName: string;
+      providerSecretKey?: string;
+      providerKey: string;
+      providerName: string;
+    };
+    "ResultSuccess__id-string--providerName-string__": {
+      data: {
+        providerName: string;
+        id: string;
+      };
+      /** @enum {number|null} */
+      error: null;
+    };
+    "Result__id-string--providerName-string_.string_": components["schemas"]["ResultSuccess__id-string--providerName-string__"] | components["schemas"]["ResultError_string_"];
+    UpdateProviderKeyRequest: {
+      byokEnabled?: boolean;
+      config?: components["schemas"]["Record_string.string_"];
+      providerSecretKey?: string;
+      providerKey?: string;
+    };
+    "ResultSuccess__api_key_hash-string--api_key_name-string--created_at-string--governance-boolean--id-number--key_permissions-string--organization_id-string--soft_delete-boolean--temp_key-boolean--updated_at-string--user_id-string_-Array_": {
+      data: {
+          user_id: string;
+          updated_at: string;
+          temp_key: boolean;
+          soft_delete: boolean;
+          organization_id: string;
+          key_permissions: string;
+          /** Format: double */
+          id: number;
+          governance: boolean;
+          created_at: string;
+          api_key_name: string;
+          api_key_hash: string;
+        }[];
+      /** @enum {number|null} */
+      error: null;
+    };
+    "Result__api_key_hash-string--api_key_name-string--created_at-string--governance-boolean--id-number--key_permissions-string--organization_id-string--soft_delete-boolean--temp_key-boolean--updated_at-string--user_id-string_-Array.string_": components["schemas"]["ResultSuccess__api_key_hash-string--api_key_name-string--created_at-string--governance-boolean--id-number--key_permissions-string--organization_id-string--soft_delete-boolean--temp_key-boolean--updated_at-string--user_id-string_-Array_"] | components["schemas"]["ResultError_string_"];
     EvaluatorResult: {
       id: string;
       created_at: string;
@@ -1042,10 +1088,6 @@ export interface components {
       error: null;
     };
     "Result__output-string--traces-string-Array--statusCode_63_-number_.string_": components["schemas"]["ResultSuccess__output-string--traces-string-Array--statusCode_63_-number__"] | components["schemas"]["ResultError_string_"];
-    /** @description Construct a type with a set of properties K of type T */
-    "Record_string.string_": {
-      [key: string]: string;
-    };
     TestInput: {
       promptTemplate?: string;
       inputs: {
@@ -3630,25 +3672,6 @@ Json: JsonObject;
       error: null;
     };
     "Result_PaginatedPurchasedCredits.string_": components["schemas"]["ResultSuccess_PaginatedPurchasedCredits_"] | components["schemas"]["ResultError_string_"];
-    "ResultSuccess__api_key_hash-string--api_key_name-string--created_at-string--governance-boolean--id-number--key_permissions-string--organization_id-string--soft_delete-boolean--temp_key-boolean--updated_at-string--user_id-string_-Array_": {
-      data: {
-          user_id: string;
-          updated_at: string;
-          temp_key: boolean;
-          soft_delete: boolean;
-          organization_id: string;
-          key_permissions: string;
-          /** Format: double */
-          id: number;
-          governance: boolean;
-          created_at: string;
-          api_key_name: string;
-          api_key_hash: string;
-        }[];
-      /** @enum {number|null} */
-      error: null;
-    };
-    "Result__api_key_hash-string--api_key_name-string--created_at-string--governance-boolean--id-number--key_permissions-string--organization_id-string--soft_delete-boolean--temp_key-boolean--updated_at-string--user_id-string_-Array.string_": components["schemas"]["ResultSuccess__api_key_hash-string--api_key_name-string--created_at-string--governance-boolean--id-number--key_permissions-string--organization_id-string--soft_delete-boolean--temp_key-boolean--updated_at-string--user_id-string_-Array_"] | components["schemas"]["ResultError_string_"];
     "ResultSuccess__id-number--active-boolean--title-string--message-string--created_at-string--updated_at-string_-Array_": {
       data: {
           updated_at: string;
@@ -4114,6 +4137,197 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["Result__count-number--prompt_tokens-number--completion_tokens-number--user_id-string--cost-number_-Array.string_"];
+        };
+      };
+    };
+  };
+  GetProviderKey: {
+    parameters: {
+      path: {
+        providerKeyId: string;
+      };
+    };
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": components["schemas"]["DecryptedProviderKey"] | {
+            error: string;
+          };
+        };
+      };
+    };
+  };
+  DeleteProviderKey: {
+    parameters: {
+      path: {
+        providerKeyId: string;
+      };
+    };
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": ({
+            /** @enum {string} */
+            providerName: "anthropic" | "openai" | "bedrock" | "vertex" | "azure-openai" | "perplexity" | "groq" | "deepseek" | "cohere" | "xai" | "google";
+          }) | {
+            error: string;
+          };
+        };
+      };
+    };
+  };
+  UpdateProviderKey: {
+    parameters: {
+      path: {
+        providerKeyId: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["UpdateProviderKeyRequest"];
+      };
+    };
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": components["schemas"]["Result__id-string--providerName-string_.string_"];
+        };
+      };
+    };
+  };
+  CreateProviderKey: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateProviderKeyRequest"];
+      };
+    };
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": {
+            id: string;
+          } | {
+            error: string;
+          };
+        };
+      };
+    };
+  };
+  GetProviderKeys: {
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": unknown[] | {
+            error: string;
+          };
+        };
+      };
+    };
+  };
+  GetAPIKeys: {
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": components["schemas"]["Result__api_key_hash-string--api_key_name-string--created_at-string--governance-boolean--id-number--key_permissions-string--organization_id-string--soft_delete-boolean--temp_key-boolean--updated_at-string--user_id-string_-Array.string_"];
+        };
+      };
+    };
+  };
+  CreateAPIKey: {
+    requestBody: {
+      content: {
+        "application/json": {
+          /** @enum {string} */
+          key_permissions?: "rw" | "r" | "w";
+          api_key_name: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": {
+            hashedKey: string;
+            apiKey: string;
+            id: string;
+          } | {
+            error: string;
+          };
+        };
+      };
+    };
+  };
+  CreateProxyKey: {
+    requestBody: {
+      content: {
+        "application/json": {
+          proxyKeyName: string;
+          providerKeyId: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": {
+            proxyKeyId: string;
+            proxyKey: string;
+          } | {
+            error: string;
+          };
+        };
+      };
+    };
+  };
+  DeleteAPIKey: {
+    parameters: {
+      path: {
+        apiKeyId: number;
+      };
+    };
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": {
+            hashedKey: string;
+          } | {
+            error: string;
+          };
+        };
+      };
+    };
+  };
+  UpdateAPIKey: {
+    parameters: {
+      path: {
+        apiKeyId: number;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          api_key_name: string;
+        };
+      };
+    };
+    responses: {
+      /** @description Ok */
+      200: {
+        content: {
+          "application/json": {
+            hashedKey: string;
+          } | {
+            error: string;
+          };
         };
       };
     };
@@ -7418,212 +7632,6 @@ export interface operations {
       200: {
         content: {
           "application/json": components["schemas"]["Result_number.string_"];
-        };
-      };
-    };
-  };
-  GetProviderKey: {
-    parameters: {
-      path: {
-        providerKeyId: string;
-      };
-    };
-    responses: {
-      /** @description Ok */
-      200: {
-        content: {
-          "application/json": components["schemas"]["DecryptedProviderKey"] | {
-            error: string;
-          };
-        };
-      };
-    };
-  };
-  DeleteProviderKey: {
-    parameters: {
-      path: {
-        providerKeyId: string;
-      };
-    };
-    responses: {
-      /** @description Ok */
-      200: {
-        content: {
-          "application/json": ({
-            /** @enum {string} */
-            providerName: "anthropic" | "openai" | "bedrock" | "vertex" | "azure-openai" | "perplexity" | "groq" | "deepseek" | "cohere" | "xai" | "google";
-          }) | {
-            error: string;
-          };
-        };
-      };
-    };
-  };
-  UpdateProviderKey: {
-    parameters: {
-      path: {
-        providerKeyId: string;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": {
-          config?: components["schemas"]["Record_string.string_"];
-          providerSecretKey?: string;
-          providerKey?: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Ok */
-      200: {
-        content: {
-          "application/json": {
-            providerName: string;
-            id: string;
-          } | {
-            error: string;
-          };
-        };
-      };
-    };
-  };
-  CreateProviderKey: {
-    requestBody: {
-      content: {
-        "application/json": {
-          providerKeyName: string;
-          config: components["schemas"]["Record_string.string_"];
-          providerSecretKey?: string;
-          providerKey: string;
-          providerName: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Ok */
-      200: {
-        content: {
-          "application/json": {
-            id: string;
-          } | {
-            error: string;
-          };
-        };
-      };
-    };
-  };
-  GetProviderKeys: {
-    responses: {
-      /** @description Ok */
-      200: {
-        content: {
-          "application/json": unknown[] | {
-            error: string;
-          };
-        };
-      };
-    };
-  };
-  GetAPIKeys: {
-    responses: {
-      /** @description Ok */
-      200: {
-        content: {
-          "application/json": components["schemas"]["Result__api_key_hash-string--api_key_name-string--created_at-string--governance-boolean--id-number--key_permissions-string--organization_id-string--soft_delete-boolean--temp_key-boolean--updated_at-string--user_id-string_-Array.string_"];
-        };
-      };
-    };
-  };
-  CreateAPIKey: {
-    requestBody: {
-      content: {
-        "application/json": {
-          /** @enum {string} */
-          key_permissions?: "rw" | "r" | "w";
-          api_key_name: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Ok */
-      200: {
-        content: {
-          "application/json": {
-            hashedKey: string;
-            apiKey: string;
-            id: string;
-          } | {
-            error: string;
-          };
-        };
-      };
-    };
-  };
-  CreateProxyKey: {
-    requestBody: {
-      content: {
-        "application/json": {
-          proxyKeyName: string;
-          providerKeyId: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Ok */
-      200: {
-        content: {
-          "application/json": {
-            proxyKeyId: string;
-            proxyKey: string;
-          } | {
-            error: string;
-          };
-        };
-      };
-    };
-  };
-  DeleteAPIKey: {
-    parameters: {
-      path: {
-        apiKeyId: number;
-      };
-    };
-    responses: {
-      /** @description Ok */
-      200: {
-        content: {
-          "application/json": {
-            hashedKey: string;
-          } | {
-            error: string;
-          };
-        };
-      };
-    };
-  };
-  UpdateAPIKey: {
-    parameters: {
-      path: {
-        apiKeyId: number;
-      };
-    };
-    requestBody: {
-      content: {
-        "application/json": {
-          api_key_name: string;
-        };
-      };
-    };
-    responses: {
-      /** @description Ok */
-      200: {
-        content: {
-          "application/json": {
-            hashedKey: string;
-          } | {
-            error: string;
-          };
         };
       };
     };

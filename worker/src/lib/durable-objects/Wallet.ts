@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { err, ok, Result } from "../util/results";
 
 // 10^10 is the scale factor for the balance
 // (which is sent to us by stripe in cents)
@@ -95,10 +96,13 @@ export class Wallet extends DurableObject<Env> {
         -- ie the stripe_payment_intent_id
         reference_id TEXT NOT NULL
       );
-      -- Tracks accumulated spending (debits) per organization with reconciliation data.
-      -- This table serves as the worker's working copy of total spending by each org,
+      -- Tracks accumulated pass through billing credits spent (ie debits) per organization with reconciliation data.
+      -- This table serves as the worker's working copy of total pass through billing credits spent by each org,
       -- aggregating actual token usage costs from all requests. It includes reconciliation
       -- fields to sync with ClickHouse analytics DB (the source of truth) and detect billing discrepancies.
+      -- 
+      -- this is basically a struct with one row that has the total amount of pass through billing credits SPENT by an org.
+      -- since we need to have a primary key, we are just re-using the org id even though the wallet is already scoped to an org.
       CREATE TABLE IF NOT EXISTS aggregated_debits (
         org_id     TEXT PRIMARY KEY,
         debits INTEGER NOT NULL DEFAULT 0,           -- Total spending in scaled cents (SCALE_FACTOR)
@@ -121,20 +125,16 @@ export class Wallet extends DurableObject<Env> {
     provider: string,
     model: string
   ): void {
-    const result = this.ctx.storage.sql.exec(
+    this.ctx.storage.sql.exec(
       "INSERT INTO disallow_list (helicone_request_id, created_at, provider, model) VALUES (?, ?, ?, ?)",
       heliconeRequestId,
       Date.now(),
       provider,
       model
     );
-
-    if (result.rowsWritten === 0) {
-      throw new Error("Unable to add to disallow list");
-    }
   }
 
-  getDisallowList(): Set<DisallowListEntry> {
+  getDisallowList(): DisallowListEntry[] {
     const result = this.ctx.storage.sql
       .exec<{
         provider: string;
@@ -142,7 +142,7 @@ export class Wallet extends DurableObject<Env> {
       }>("SELECT provider, model FROM disallow_list")
       .toArray();
 
-    return new Set(result);
+    return result;
   }
 
   isEventProcessed(eventId: string): boolean {
@@ -280,7 +280,7 @@ export class Wallet extends DurableObject<Env> {
     orgId: string,
     requestId: string,
     amountToReserve: number
-  ): { escrowId: string } {
+  ): Result<{ escrowId: string }, string> {
     const amountToReserveScaled = amountToReserve * SCALE_FACTOR;
     return this.ctx.storage.transactionSync(() => {
       const totalCreditsPurchased = this.ctx.storage.sql
@@ -300,7 +300,7 @@ export class Wallet extends DurableObject<Env> {
       const availableBalance = totalCreditsPurchased - totalEscrow - totalDebits;
 
       if (availableBalance - amountToReserveScaled < MINIMUM_RESERVE) {
-        throw new Error(
+        return err(
           `Insufficient balance for escrow. Available: ${availableBalance / SCALE_FACTOR} cents, needed: ${amountToReserve} cents`
         );
       }
@@ -317,7 +317,7 @@ export class Wallet extends DurableObject<Env> {
         requestId
       );
 
-      return { escrowId } as { escrowId: string };
+      return ok({ escrowId });
     });
   }
 
@@ -350,14 +350,10 @@ export class Wallet extends DurableObject<Env> {
   }
 
   cancelEscrow(escrowId: string): void {
-    const result = this.ctx.storage.sql.exec(
+    this.ctx.storage.sql.exec(
       "DELETE FROM escrows WHERE id = ?",
       escrowId
     );
-
-    if (result.rowsWritten === 0) {
-      throw new Error(`Escrow ${escrowId} not found`);
-    }
   }
 
   updateClickhouseValues(

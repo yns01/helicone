@@ -92,25 +92,12 @@ export async function getAiGatewaySpend(
     {
       org_id,
       filter: {
-        left: {
-          request_response_rmt: {
-            request_referrer: {
-              equals: "ai-gateway",
-            },
-          },
-        },
-        operator: "and",
-        right: {
-          request_response_rmt: {
-            is_passthrough_billing: {
-              equals: true,
-            },
+        request_response_rmt: {
+          is_passthrough_billing: {
+            equals: true,
           },
         },
       },
-
-
-
       argsAcc: [],
     },
   );
